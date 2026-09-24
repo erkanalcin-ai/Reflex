@@ -1,0 +1,6 @@
+# Copy this file to key.properties and fill in local production upload-key values.
+# Never commit key.properties or the keystore file.
+storeFile=keystore/release-upload.jks
+storePassword=REPLACE_LOCALLY
+keyAlias=REPLACE_LOCALLY
+keyPassword=REPLACE_LOCALLY

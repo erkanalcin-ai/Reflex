@@ -1,0 +1,28 @@
+# Local Android/Gradle files
+.gradle/
+local.properties
+build/
+app/build/
+
+# Release signing material and JVM heap dumps
+key.properties
+*.jks
+*.keystore
+*.hprof
+
+# IDE, temporary, and OS-generated files
+.kotlin/
+.idea/
+.vscode/
+*.iml
+*.log
+*.tmp
+*.bak
+*.swp
+.DS_Store
+Thumbs.db
+
+# Additional private signing formats
+*.pem
+*.p12
+*.pfx
