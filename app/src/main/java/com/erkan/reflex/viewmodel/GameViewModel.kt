@@ -46,6 +46,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private var balloonJob: Job? = null
     private var particleAnimationJob: Job? = null
+    private var poppedInCurrentWave = 0
+    private var falseTapPenaltyApplied = false
 
     private val vibrator: Vibrator? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         val manager = application.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
@@ -71,6 +73,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         balloonJob?.cancel()
         particles.clear()
         floatingTexts.clear()
+        poppedInCurrentWave = 0
+        falseTapPenaltyApplied = false
 
         _gameState.update {
             GameState(
@@ -92,6 +96,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun scheduleNextBalloon() {
         balloonJob?.cancel()
+        poppedInCurrentWave = 0
+        falseTapPenaltyApplied = false
         balloonJob = viewModelScope.launch {
             val state = _gameState.value
             if (state.lives <= 0 || state.balloonIndex >= 100) {
@@ -153,14 +159,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             // Süre dolduğunda balon hala patlatılmadıysa kaçırıldı sayılır
             if (_gameState.value.currentBalloons.any { it.spawnTime == spawnTime }) {
-                onBalloonMissed()
+                onBalloonMissed(spawnTime)
             }
         }
     }
 
-    fun onBalloonTapped(balloonId: String, touchX: Float, touchY: Float) {
+    fun onBalloonTapped(balloonId: String, touchX: Float, touchY: Float): Boolean {
         val state = _gameState.value
-        val current = state.currentBalloons.firstOrNull { it.id == balloonId } ?: return
+        val current = state.currentBalloons.firstOrNull { it.id == balloonId } ?: return false
         val now = System.currentTimeMillis()
         val reactionTime = now - current.spawnTime
         val remainingMs = maxOf(0L, current.lifespanMs - reactionTime)
@@ -187,9 +193,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         )
 
-        // Titreşim bildirimi
-        vibrate(short = true)
-
         val newScore = state.score + 1
         val newHighScore = maxOf(_gameState.value.highScore, newScore)
         if (newHighScore > _gameState.value.highScore) {
@@ -198,6 +201,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val bestTime = state.bestReactionTimeMs?.let { minOf(it, reactionTime) } ?: reactionTime
         val remainingBalloons = state.currentBalloons.filterNot { it.id == balloonId }
+        poppedInCurrentWave++
         val newPoppedCount = state.poppedCount + 1
         val extraLifeEarned = newPoppedCount % 10 == 0
 
@@ -218,14 +222,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             balloonJob?.cancel()
             scheduleNextBalloon()
         }
+        return true
     }
 
-    private fun onBalloonMissed() {
-        vibrate(short = false)
+    /** Applies one score penalty at most for false taps during a wave's wait/active period. */
+    fun onInvalidTap(): Boolean {
+        val state = _gameState.value
+        if (state.status != GameStatus.WAITING_BALLOON && state.status != GameStatus.BALLOON_ACTIVE) {
+            return false
+        }
+        if (falseTapPenaltyApplied) return false
 
-        val newScore = _gameState.value.score - 1
-        val newLives = _gameState.value.lives - 1
-        val newMissed = _gameState.value.missedCount + 1
+        falseTapPenaltyApplied = true
+        _gameState.update { current ->
+            if (current.status == GameStatus.WAITING_BALLOON || current.status == GameStatus.BALLOON_ACTIVE) {
+                current.copy(score = current.score - 1)
+            } else {
+                current
+            }
+        }
+        return true
+    }
+
+    private fun onBalloonMissed(spawnTime: Long) {
+        val state = _gameState.value
+        if (state.currentBalloons.none { it.spawnTime == spawnTime }) return
+
+        val waveHadHit = poppedInCurrentWave > 0
+        val newScore = if (!waveHadHit && !falseTapPenaltyApplied) state.score - 1 else state.score
+        val newLives = if (waveHadHit) state.lives else state.lives - 1
+        val newMissed = state.missedCount + 1
+
+        if (!waveHadHit) vibrate(short = false)
 
         _gameState.update {
             it.copy(

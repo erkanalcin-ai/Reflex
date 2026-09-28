@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:drawable="@drawable/reflex_launcher_foreground"
+    android:drawable="@drawable/premium_glass_balloon_splash"
     android:insetLeft="20dp"
     android:insetTop="20dp"
     android:insetRight="20dp"

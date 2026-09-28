@@ -1,6 +1,7 @@
 package com.erkan.reflex.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -28,12 +31,18 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -48,17 +57,35 @@ import com.erkan.reflex.ui.components.GameOverDialog
 import com.erkan.reflex.ui.components.PremiumBalloonArtwork
 import com.erkan.reflex.ui.components.ScoreBoard
 import com.erkan.reflex.ui.components.GameMetricsStrip
+import com.erkan.reflex.ui.performReflexErrorHaptic
+import com.erkan.reflex.ui.performReflexHitHaptic
 import com.erkan.reflex.ui.theme.PremiumGold
 import com.erkan.reflex.ui.theme.PremiumInk
 import com.erkan.reflex.ui.theme.PremiumMuted
 import com.erkan.reflex.ui.theme.TextPrimary
 import com.erkan.reflex.viewmodel.GameViewModel
+import com.erkan.reflex.viewmodel.TwoPlayerDuelViewModel
 
 @Composable
 fun GameScreen(
     viewModel: GameViewModel,
+    duelViewModel: TwoPlayerDuelViewModel,
     modifier: Modifier = Modifier
 ) {
+    var showDuel by remember { mutableStateOf(false) }
+
+    if (showDuel) {
+        TwoPlayerDuelScreen(
+            viewModel = duelViewModel,
+            onExit = {
+                duelViewModel.reset()
+                showDuel = false
+            },
+            modifier = modifier
+        )
+        return
+    }
+
     val gameState by viewModel.gameState.collectAsState()
     val backgroundBalloonIndex = (
         if (gameState.currentBalloons.isNotEmpty()) gameState.balloonIndex
@@ -112,7 +139,11 @@ fun GameScreen(
             when (gameState.status) {
                 GameStatus.NOT_STARTED -> StartScreen(
                     highScore = gameState.highScore,
-                    onStart = { viewModel.startGame() }
+                    onStart = { viewModel.startGame() },
+                    onOpenDuel = {
+                        duelViewModel.reset()
+                        showDuel = true
+                    }
                 )
 
                 GameStatus.WAITING_BALLOON,
@@ -141,6 +172,8 @@ fun ActiveGamePlay(
     modifier: Modifier = Modifier
 ) {
     val gameState by viewModel.gameState.collectAsState()
+    val densityScale = LocalDensity.current.density
+    val hapticView = LocalView.current
 
     Column(modifier = modifier) {
         ScoreBoard(gameState = gameState)
@@ -149,6 +182,46 @@ fun ActiveGamePlay(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .pointerInput(viewModel, densityScale) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                // Her parmağın yalnızca ilk basışını işle; balon listesi
+                                // değiştiğinde bu pointerInput döngüsü yeniden başlamaz.
+                                if (!change.previousPressed && change.pressed) {
+                                    val currentState = viewModel.gameState.value
+                                    if (currentState.status != GameStatus.WAITING_BALLOON &&
+                                        currentState.status != GameStatus.BALLOON_ACTIVE
+                                    ) {
+                                        return@forEach
+                                    }
+
+                                    val tap = change.position
+                                    val playAreaWidthPx = size.width.toFloat()
+                                    val playAreaHeightPx = size.height.toFloat()
+                                    val tappedBalloon = currentState.currentBalloons.firstOrNull { balloon ->
+                                        val balloonSizePx = balloon.sizeDp * densityScale
+                                        val centerX = playAreaWidthPx * balloon.xRatio
+                                        val centerY = playAreaHeightPx * balloon.yRatio
+                                        tap.x >= centerX - balloonSizePx / 2f &&
+                                            tap.x <= centerX + balloonSizePx / 2f &&
+                                            tap.y >= centerY - balloonSizePx / 2f &&
+                                            tap.y <= centerY + balloonSizePx / 2f
+                                    }
+
+                                    if (tappedBalloon != null) {
+                                        if (viewModel.onBalloonTapped(tappedBalloon.id, tap.x, tap.y)) {
+                                            hapticView.performReflexHitHaptic()
+                                        }
+                                    } else if (viewModel.onInvalidTap()) {
+                                        hapticView.performReflexErrorHaptic()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
         ) {
             val widthPx = constraints.maxWidth.toFloat()
             val heightPx = constraints.maxHeight.toFloat()
@@ -157,10 +230,7 @@ fun ActiveGamePlay(
                 BalloonView(
                     balloon = balloon,
                     containerWidth = widthPx,
-                    containerHeight = heightPx,
-                    onTapped = { touchX, touchY ->
-                        viewModel.onBalloonTapped(balloon.id, touchX, touchY)
-                    }
+                    containerHeight = heightPx
                 )
             }
 
@@ -182,18 +252,21 @@ fun ActiveGamePlay(
 @Composable
 fun StartScreen(
     highScore: Int,
-    onStart: () -> Unit
+    onStart: () -> Unit,
+    onOpenDuel: () -> Unit
 ) {
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .padding(horizontal = 28.dp, vertical = 14.dp)
     ) {
-        val heroHeight = (maxHeight * 0.43f).coerceIn(245.dp, 340.dp)
+        val heroHeight = (maxHeight * 0.37f).coerceIn(220.dp, 300.dp)
         val heroWidth = (maxWidth * 0.76f).coerceIn(230.dp, 290.dp)
 
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Spacer(modifier = Modifier.height(8.dp))
@@ -270,6 +343,41 @@ fun StartScreen(
                         imageVector = Icons.Filled.PlayArrow,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(
+                onClick = onOpenDuel,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0x7A171B25),
+                    contentColor = PremiumGold
+                ),
+                border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.42f)),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "2 KİŞİLİK REFLEKS DÜELLOSU",
+                        color = PremiumGold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.1.sp
+                    )
+                    Text(
+                        text = "2P",
+                        color = PremiumGold,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
                     )
                 }
             }

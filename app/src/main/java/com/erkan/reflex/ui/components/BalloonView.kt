@@ -1,7 +1,6 @@
 package com.erkan.reflex.ui.components
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
@@ -11,7 +10,6 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -26,7 +24,6 @@ fun BalloonView(
     balloon: Balloon,
     containerWidth: Float,
     containerHeight: Float,
-    onTapped: (touchX: Float, touchY: Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
@@ -38,11 +35,6 @@ fun BalloonView(
         modifier = modifier
             .offset { IntOffset(left, top) }
             .size(balloon.sizeDp.dp)
-            .pointerInput(balloon.id) {
-                detectTapGestures { offset ->
-                    onTapped(left + offset.x, top + offset.y)
-                }
-            }
     ) {
         Image(
             painter = painterResource(R.drawable.premium_game_balloon),
