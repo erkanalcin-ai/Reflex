@@ -1,8 +1,10 @@
 package com.erkan.reflex.ui
 
+import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,10 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -41,9 +42,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -87,11 +91,7 @@ fun GameScreen(
     }
 
     val gameState by viewModel.gameState.collectAsState()
-    val backgroundBalloonIndex = (
-        if (gameState.currentBalloons.isNotEmpty()) gameState.balloonIndex
-        else (gameState.balloonIndex - 1).coerceAtLeast(0)
-    ).coerceIn(0, 99)
-    val balloonDurationMs = maxOf(16L, 1000L - (backgroundBalloonIndex * (1000L - 16L) / 99L))
+    val balloonDurationMs = gameState.lastBalloonDurationMs
     val backgroundVariant = when {
         balloonDurationMs <= 333L -> 3
         balloonDurationMs <= 667L -> 2
@@ -255,6 +255,10 @@ fun StartScreen(
     onStart: () -> Unit,
     onOpenDuel: () -> Unit
 ) {
+    val context = LocalContext.current
+    val uriHandler = LocalUriHandler.current
+    val appVersion = remember(context) { getInstalledVersionName(context) }
+
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
@@ -264,126 +268,234 @@ fun StartScreen(
         val heroWidth = (maxWidth * 0.76f).coerceIn(230.dp, 290.dp)
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "REFLEX",
-                color = TextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Medium,
-                letterSpacing = 7.sp
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-            Box(
+            Column(
                 modifier = Modifier
-                    .width(48.dp)
-                    .height(1.dp)
-                    .clip(CircleShape)
-                    .background(PremiumGold.copy(alpha = 0.72f))
-            )
-
-            Box(
-                modifier = Modifier
+                    .weight(1f)
                     .fillMaxWidth()
-                    .height(heroHeight),
-                contentAlignment = Alignment.Center
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                PremiumBalloonArtwork(width = heroWidth, height = heroHeight)
-            }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "REFLEX",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 7.sp
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Box(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .height(1.dp)
+                        .clip(CircleShape)
+                        .background(PremiumGold.copy(alpha = 0.72f))
+                )
 
-            Text(
-                text = "Refleksini test et.",
-                color = TextPrimary,
-                fontFamily = FontFamily.Serif,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = "Balonu görür görmez dokun.",
-                color = PremiumMuted,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Normal,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(22.dp))
-            PersonalBestCard(highScore = highScore)
-            Spacer(modifier = Modifier.height(22.dp))
-
-            Button(
-                onClick = onStart,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = PremiumGold,
-                    contentColor = PremiumInk
-                ),
-                shape = RoundedCornerShape(50),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(heroHeight),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = "OYUNA BAŞLA",
-                        color = PremiumInk,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.8.sp
-                    )
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    PremiumBalloonArtwork(width = heroWidth, height = heroHeight)
                 }
+
+                Text(
+                    text = "Refleksini test et.",
+                    color = TextPrimary,
+                    fontFamily = FontFamily.Serif,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(5.dp))
+                Text(
+                    text = "Balonu görür görmez dokun.",
+                    color = PremiumMuted,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+                PersonalBestCard(highScore = highScore)
+                Spacer(modifier = Modifier.height(22.dp))
+
+                PrimaryGameAction(onClick = onStart)
+                Spacer(modifier = Modifier.height(10.dp))
+                DuelGameAction(onClick = onOpenDuel)
+                Spacer(modifier = Modifier.height(14.dp))
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-            Button(
-                onClick = onOpenDuel,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0x7A171B25),
-                    contentColor = PremiumGold
-                ),
-                border = BorderStroke(1.dp, PremiumGold.copy(alpha = 0.42f)),
-                shape = RoundedCornerShape(50),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "2 KİŞİLİK REFLEKS DÜELLOSU",
-                        color = PremiumGold,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp
-                    )
-                    Text(
-                        text = "2P",
-                        color = PremiumGold,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.sp
-                    )
-                }
-            }
+            HomeFooter(
+                versionName = appVersion,
+                onOpenPrivacy = { uriHandler.openUri(PRIVACY_POLICY_URL) }
+            )
         }
     }
 }
+
+@Composable
+private fun PrimaryGameAction(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(76.dp)
+            .clip(shape)
+            .background(
+                Brush.horizontalGradient(
+                    listOf(Color(0xFFFFE8AE), PremiumGold, Color(0xFFD5B16A))
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.42f), shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(start = 20.dp, end = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(
+                text = "TEK KİŞİLİK · REFLEKS TESTİ",
+                color = PremiumInk.copy(alpha = 0.68f),
+                fontSize = 9.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.3.sp
+            )
+            Text(
+                text = "OYUNA BAŞLA",
+                color = PremiumInk,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 1.4.sp
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(PremiumInk)
+                .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = PremiumGold,
+                modifier = Modifier.size(23.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DuelGameAction(onClick: () -> Unit) {
+    val shape = RoundedCornerShape(22.dp)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(72.dp)
+            .clip(shape)
+            .background(
+                Brush.horizontalGradient(listOf(Color(0xFF20242D), Color(0xFF12161E)))
+            )
+            .border(1.dp, PremiumGold.copy(alpha = 0.35f), shape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(start = 20.dp, end = 15.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(32.dp)
+                    .clip(CircleShape)
+                    .background(PremiumGold.copy(alpha = 0.82f))
+            )
+            Spacer(modifier = Modifier.width(13.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text(
+                    text = "AYNI TELEFONDA · 2 OYUNCU",
+                    color = PremiumMuted,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.15.sp
+                )
+                Text(
+                    text = "REFLEKS DÜELLOSU",
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.05.sp
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(PremiumGold.copy(alpha = 0.08f))
+                .border(1.dp, PremiumGold.copy(alpha = 0.52f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "2P",
+                color = PremiumGold,
+                fontFamily = FontFamily.Serif,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.7.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun HomeFooter(versionName: String, onOpenPrivacy: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 2.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(PremiumGold.copy(alpha = 0.13f))
+        )
+        TextButton(onClick = onOpenPrivacy) {
+            Text(
+                text = "GİZLİLİK POLİTİKASI  ↗",
+                color = PremiumMuted,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 1.35.sp
+            )
+        }
+        Text(
+            text = "SÜRÜM $versionName",
+            color = PremiumMuted.copy(alpha = 0.58f),
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Light,
+            letterSpacing = 1.6.sp
+        )
+    }
+}
+
+@Suppress("DEPRECATION")
+private fun getInstalledVersionName(context: Context): String =
+    context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.1"
+
+private const val PRIVACY_POLICY_URL =
+    "https://erkanalcin-ai.github.io/Reflex/privacy-policy.html"
 
 @Composable
 private fun PersonalBestCard(highScore: Int) {

@@ -83,6 +83,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lives = 3,
                 highScore = loadHighScore(),
                 balloonIndex = 0,
+                difficultyIndex = 0,
+                lastBalloonDurationMs = 1000L,
                 currentBalloons = emptyList(),
                 lastReactionTimeMs = null,
                 bestReactionTimeMs = null,
@@ -111,8 +113,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val waitDelay = Random.nextLong(400L, 1001L)
             delay(waitDelay)
 
-            // Süre hesabı: 1. balon = 1000ms, 100. balon = 16ms
-            val index = _gameState.value.balloonIndex.coerceIn(0, 99)
+            // Süre eğrisi aynı kalır; kaçırılan dalga zorluk kademesini bir adım geri alır.
+            val index = _gameState.value.difficultyIndex.coerceIn(0, 99)
             val durationMs = maxOf(16L, 1000L - (index * (1000L - 16L) / 99L))
 
             // Renk geçişi: 0.0 -> Gri, 0.5 -> Mor, 1.0 -> Kırmızı
@@ -150,6 +152,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _gameState.update {
                 it.copy(
                     status = GameStatus.BALLOON_ACTIVE,
+                    lastBalloonDurationMs = durationMs,
                     currentBalloons = balloons
                 )
             }
@@ -214,6 +217,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lastReactionTimeMs = reactionTime,
                 bestReactionTimeMs = bestTime,
                 balloonIndex = if (remainingBalloons.isEmpty()) it.balloonIndex + 1 else it.balloonIndex,
+                difficultyIndex = if (remainingBalloons.isEmpty()) {
+                    (it.difficultyIndex + 1).coerceAtMost(99)
+                } else {
+                    it.difficultyIndex
+                },
                 currentBalloons = remainingBalloons
             )
         }
@@ -261,6 +269,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 lives = newLives,
                 missedCount = newMissed,
                 balloonIndex = it.balloonIndex + 1,
+                difficultyIndex = if (waveHadHit) {
+                    (it.difficultyIndex + 1).coerceAtMost(99)
+                } else {
+                    (it.difficultyIndex - 1).coerceAtLeast(0)
+                },
                 currentBalloons = emptyList()
             )
         }

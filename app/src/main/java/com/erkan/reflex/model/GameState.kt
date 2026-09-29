@@ -13,6 +13,8 @@ data class GameState(
     val lives: Int = 3,
     val highScore: Int = 0,
     val balloonIndex: Int = 0, // 0'dan 99'a kadar (100 balon)
+    val difficultyIndex: Int = 0, // Başarıda +1, tamamen kaçırmada -1 zorluk kademesi
+    val lastBalloonDurationMs: Long = 1000L, // Arka plan son doğan balonun süresini izler
     val currentBalloons: List<Balloon> = emptyList(),
     val lastReactionTimeMs: Long? = null,
     val bestReactionTimeMs: Long? = null,
